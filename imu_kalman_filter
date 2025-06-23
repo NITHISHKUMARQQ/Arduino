@@ -1,0 +1,117 @@
+class Kalman {
+  public:
+    Kalman() {
+      Q_angle = 0.001f;
+      Q_bias = 0.003f;
+      R_measure = 0.03f;
+
+      angle = 0.0f;
+      bias = 0.0f;
+
+      P[0][0] = 0.0f;
+      P[0][1] = 0.0f;
+      P[1][0] = 0.0f;
+      P[1][1] = 0.0f;
+    }
+
+    float getAngle(float newAngle, float newRate, float dt) {
+      // Prediction
+      rate = newRate - bias;
+      angle += dt * rate;
+
+      // Update estimation error covariance
+      P[0][0] += dt * (dt * P[1][1] - P[0][1] - P[1][0] + Q_angle);
+      P[0][1] -= dt * P[1][1];
+      P[1][0] -= dt * P[1][1];
+      P[1][1] += Q_bias * dt;
+
+      // Compute Kalman gain
+      float S = P[0][0] + R_measure;
+      float K[2];
+      K[0] = P[0][0] / S;
+      K[1] = P[1][0] / S;
+
+      // Correction
+      float y = newAngle - angle;
+      angle += K[0] * y;
+      bias += K[1] * y;
+
+      // Update error covariance matrix
+      float P00_temp = P[0][0];
+      float P01_temp = P[0][1];
+
+      P[0][0] -= K[0] * P00_temp;
+      P[0][1] -= K[0] * P01_temp;
+      P[1][0] -= K[1] * P00_temp;
+      P[1][1] -= K[1] * P01_temp;
+
+      return angle;
+    }
+
+  private:
+    float Q_angle, Q_bias, R_measure;
+    float angle, bias, rate;
+    float P[2][2];
+};
+#include <Wire.h>
+
+#define MPU_ADDR 0x68
+
+Kalman kalmanX, kalmanY;
+
+int16_t ax, ay, az, gx, gy, gz;
+float accAngleX, accAngleY;
+float kalAngleX, kalAngleY;
+
+unsigned long timer;
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin();
+
+  // Wake up MPU6050
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission(true);
+
+  timer = micros();
+}
+
+void loop() {
+  // Read raw data
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, 14, true);
+
+  ax = Wire.read() << 8 | Wire.read();
+  ay = Wire.read() << 8 | Wire.read();
+  az = Wire.read() << 8 | Wire.read();
+  Wire.read(); Wire.read();  // skip temp
+  gx = Wire.read() << 8 | Wire.read();
+  gy = Wire.read() << 8 | Wire.read();
+  gz = Wire.read() << 8 | Wire.read();
+
+  // Convert accel to angles
+  accAngleX = atan2(ay, az) * 180.0 / PI;
+  accAngleY = atan2(-ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+
+  // Time step
+  float dt = (micros() - timer) / 1000000.0;
+  timer = micros();
+
+  // Convert gyro to °/s
+  float gyroXrate = gx / 131.0;
+  float gyroYrate = gy / 131.0;
+
+  // Apply Kalman filter
+  kalAngleX = kalmanX.getAngle(accAngleX, gyroXrate, dt);
+  kalAngleY = kalmanY.getAngle(accAngleY, gyroYrate, dt);
+
+  // Print
+  Serial.print("Kalman Pitch: "); Serial.print(kalAngleY);
+  Serial.print("°, Kalman Roll: "); Serial.println(kalAngleX);
+
+  delay(10);
+}
