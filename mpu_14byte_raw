@@ -1,0 +1,52 @@
+
+// ALL THE COMMENT LINES ARE WRITE BY ME BASED ON MY UNDERSTANING ///
+
+#include <Wire.h>//INITIALIZE THE WIRE LIBRARY FOR I2C 
+
+const int MPU_ADDR = 0x68; //activate the mpu6050 
+
+void setup() {
+  Serial.begin(115200);// SET THE SERIAL BEGIN 115200 FOR FAST SERIAL COMMUNICATION (PRINTING)
+  Wire.begin();
+
+  // Wake up MPU6050
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B);  // Power management register
+  Wire.write(0);     // Wake it up
+  Wire.endTransmission(true); // CLOSE THE COMMUNICATION 
+}
+
+void loop() {
+  
+  Wire.beginTransmission(MPU_ADDR);// ACTIVATE THE MPU SENSOR 
+  Wire.write(0x3B);// START DATA WRITE   FROM THE REGISTER 0X3B,0X3C,0X3D.......,0X40(HIGH AND LOW)FREQUENCY 
+  Wire.endTransmission(false);  // Keep I2C open FOR CONTINOUS DATA TRANSFER 
+
+  // Step 2: Request 14 bytes
+  Wire.requestFrom(MPU_ADDR, 14, true);//REQUEST THE DATA IN ORDER 
+
+  // Step 3: Read THE DATA IN THE SAME ORDER FROM THE REGISTER 
+  /// "<8" COMBINES THE LOW AND HIGH FREQUENCY 
+  int16_t ax = Wire.read() << 8 | Wire.read();
+  int16_t ay = Wire.read() << 8 | Wire.read();
+  int16_t az = Wire.read() << 8 | Wire.read();
+  int16_t tempRaw = Wire.read() << 8 | Wire.read();
+  int16_t gx = Wire.read() << 8 | Wire.read();
+  int16_t gy = Wire.read() << 8 | Wire.read();
+  int16_t gz = Wire.read() << 8 | Wire.read();
+
+  // Step 4: Convert raw temperature to Celsius
+  float temperature = tempRaw / 340.0 + 36.53;
+
+  // Step 5: Print everything
+  Serial.print("Ax: "); Serial.print(ax);
+  Serial.print(" Ay: "); Serial.print(ay);
+  Serial.print(" Az: "); Serial.print(az);
+  Serial.print(" | Temp: "); Serial.print(temperature);
+  Serial.print("°C | Gx: "); Serial.print(gx);
+  Serial.print(" Gy: "); Serial.print(gy);
+  Serial.print(" Gz: "); Serial.println(gz);
+
+  delay(300);
+}
+
